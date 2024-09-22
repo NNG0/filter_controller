@@ -31,6 +31,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "filter_controller"
+version = "0.1.0"
+dependencies = [
+ "ctrlc",
+ "rppal",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.158"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -46,14 +54,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
-]
-
-[[package]]
-name = "pool-filtercontrol"
-version = "0.1.0"
-dependencies = [
- "ctrlc",
- "rppal",
 ]
 
 [[package]]
