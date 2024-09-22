@@ -1,8 +1,13 @@
 use rppal::gpio::Gpio;
 use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread::sleep;
+use ctrlc;
 mod filter_controller;
 
 fn main() {
+    println!("Process started");
     const RELAY_1_PIN: u8 = 17;
     const RELAY_2_PIN: u8 = 27;
     const SENSOR_2_PIN: u8 = 22;
@@ -16,11 +21,24 @@ fn main() {
 
     let mut last_filter_run = Instant::now();
 
-    loop {
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+
+    ctrlc::set_handler(move || {
+        println!("Exiting... Turning off relays");
+        r.store(false, Ordering::SeqCst);
+    }).expect("Error setting Ctrl+C handler");
+
+    while running.load(Ordering::SeqCst) {
         let now =Instant::now();
         if float_sensor.is_low() || now.duration_since(last_filter_run) >= Duration::from_secs(1800) {
+            println!("Filter process running");
             filter_controller.run_filter_process();
             last_filter_run = Instant::now();
         }
+        sleep(Duration::from_secs(1));
     }
+
+    filter_controller.stop_filter_process();
+
 }

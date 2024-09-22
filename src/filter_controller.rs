@@ -17,18 +17,22 @@ impl FilterController {
 
     fn start_filter_process(&mut self) {
         self.relay1.set_high();
+        sleep(Duration::from_secs(1));
         self.relay2.set_low();
+        sleep(Duration::from_secs(1));
     }
 
-    fn stop_filter_process(&mut self) {
+    pub fn stop_filter_process(&mut self) {
         self.relay1.set_low();
+        sleep(Duration::from_secs(1));
         self.relay2.set_low();
+        sleep(Duration::from_secs(1));
     }
 
     pub fn run_filter_process(&mut self) {
        self.start_filter_process();
-       sleep(Duration::from_secs(5));
+       sleep(Duration::from_secs(10));
        self.stop_filter_process();
-       sleep(Duration::from_secs(5));
+       sleep(Duration::from_secs(20));
     }
 } 
