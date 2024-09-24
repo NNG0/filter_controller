@@ -44,7 +44,10 @@ fn main() {
     })
     .expect("Error setting Ctrl+C handler");
 
-    filter_controller.start_filter_process();
+    if float_sensor.is_low() {
+        filter_controller.start_filter_process();
+    }
+
     let mut last_filter_run = Instant::now();
 
     while running.load(Ordering::SeqCst) {

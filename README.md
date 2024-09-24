@@ -18,7 +18,6 @@ edit service file (set User)
 ```
 [Unit]
 Description=Filter Controller Service
-After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/filter_controller
