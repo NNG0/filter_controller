@@ -1,81 +1,56 @@
-use ctrlc;
-use rppal::gpio::Gpio;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::thread::sleep;
-use std::time::{Duration, Instant};
+#![no_std]
+#![no_main]
+
+use embassy_executor::Spawner;
+use embassy_rp::gpio::{Input, Level, Output, Pull};
+use embassy_time::{Duration, Instant};
 mod filter_controller;
+use {defmt_rtt as _, panic_probe as _};
 
 const RUN_DURATION_SECS: u64 = 10;
 const PAUSE_DURATION_SECS: u64 = 20;
 const MAX_FILTER_INTERVAL_SECS: u64 = 1800;
 
-fn main() {
-    println!("Process started");
-    const RELAY_1_PIN: u8 = 2;
-    const RELAY_2_PIN: u8 = 17;
-    const SENSOR_PIN: u8 = 22;
+#[embassy_executor::main]
+async fn main(_spawner: Spawner) {
+    let p = embassy_rp::init(Default::default());
 
-    let gpio = Gpio::new().expect("Failed to access GPIO");
-    let mut relay1 = gpio
-        .get(RELAY_1_PIN)
-        .expect("Failed to get relay 1")
-        .into_output();
-    let mut relay2 = gpio
-        .get(RELAY_2_PIN)
-        .expect("Failed to get relay 2")
-        .into_output();
-    let float_sensor = gpio
-        .get(SENSOR_PIN)
-        .expect("Failed to get sensor 2")
-        .into_input_pullup();
+    let relay1 = Output::new(p.PIN_2, Level::Low);
+    let relay2 = Output::new(p.PIN_17, Level::Low);
+    let float_sensor = Input::new(p.PIN_22, Pull::Up);
 
-    // ensure relays are off initially
-    relay1.set_high();
-    relay2.set_high();
-
-    let mut filter_controller = filter_controller::FilterController::new(relay1, relay2);
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-
-    ctrlc::set_handler(move || {
-        println!("Exiting... Turning off relays");
-        r.store(false, Ordering::SeqCst);
-    })
-    .expect("Error setting Ctrl+C handler");
+    let mut filter_controller = filter_controller::FilterController::new( relay1, relay2);
 
     if float_sensor.is_low() {
-        filter_controller.start_filter_process();
+        filter_controller.start_filter_process().await;
     }
 
     let mut last_filter_run = Instant::now();
 
-    while running.load(Ordering::SeqCst) {
+    loop {
         let now = Instant::now();
 
         // check if it is time to start filter
         if !filter_controller.is_running()
-            && now.duration_since(last_filter_run) >= Duration::from_secs(PAUSE_DURATION_SECS)
+            && now.checked_duration_since(last_filter_run).unwrap_or_default()
+                >= Duration::from_secs(PAUSE_DURATION_SECS)
         {
             if float_sensor.is_low()
-                || now.duration_since(last_filter_run)
+                || now.checked_duration_since(last_filter_run).unwrap_or_default()
                     >= Duration::from_secs(MAX_FILTER_INTERVAL_SECS)
             {
-                filter_controller.start_filter_process();
+                filter_controller.start_filter_process().await;
                 last_filter_run = Instant::now();
             }
         }
 
         // check if it is time to stop filter
         if filter_controller.is_running()
-            && now.duration_since(last_filter_run) >= Duration::from_secs(RUN_DURATION_SECS)
+            && now.checked_duration_since(last_filter_run).unwrap_or_default()
+                >= Duration::from_secs(RUN_DURATION_SECS)
         {
-            filter_controller.stop_filter_process();
+            filter_controller.stop_filter_process().await;
             last_filter_run = Instant::now();
         }
-
-        sleep(Duration::from_secs(1));
     }
-
-    filter_controller.stop_filter_process();
 }
