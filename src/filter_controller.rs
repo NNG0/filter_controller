@@ -1,7 +1,5 @@
 use embassy_rp::gpio::Output;
 
-const RELAY_DELAY_MS: u64 = 50;
-
 pub struct FilterController<'a> {
     relay1: Output<'a>,
     relay2: Output<'a>,
