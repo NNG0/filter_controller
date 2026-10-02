@@ -1,56 +1,53 @@
-#![no_std]
-#![no_main]
+#![no_std] #![no_main]
 
 use embassy_executor::Spawner;
 use embassy_rp::gpio::{Input, Level, Output, Pull};
-use embassy_time::{Duration, Instant};
+use embassy_time::{Duration, Instant, Timer};
 mod filter_controller;
 use {defmt_rtt as _, panic_probe as _};
 
-const RUN_DURATION_SECS: u64 = 10;
-const PAUSE_DURATION_SECS: u64 = 20;
-const MAX_FILTER_INTERVAL_SECS: u64 = 1800;
+const RUN_DURATION: Duration = Duration::from_secs(10);
+const PAUSE_DURATION: Duration = Duration::from_secs(20);
+const MAX_FILTER_INTERVAL: Duration = Duration::from_secs(1800);
+const TICK_INTERVAL: Duration = Duration::from_millis(200);
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
 
-    let relay1 = Output::new(p.PIN_2, Level::Low);
-    let relay2 = Output::new(p.PIN_17, Level::Low);
-    let float_sensor = Input::new(p.PIN_22, Pull::Up);
+    let relay1 = Output::new(p.PIN_0, Level::Low);
+    let relay2 = Output::new(p.PIN_1, Level::Low);
+    let float_sensor = Input::new(p.PIN_2, Pull::Up);
 
     let mut filter_controller = filter_controller::FilterController::new( relay1, relay2);
 
-    if float_sensor.is_low() {
-        filter_controller.start_filter_process().await;
-    }
-
     let mut last_filter_run = Instant::now();
+
+    if float_sensor.is_low() {
+        filter_controller.start_filter_process();
+        last_filter_run = Instant::now();
+    }
 
     loop {
         let now = Instant::now();
+        let elapsed = now.checked_duration_since(last_filter_run).unwrap_or_default();
+        let float_low = float_sensor.is_low();
 
         // check if it is time to start filter
-        if !filter_controller.is_running()
-            && now.checked_duration_since(last_filter_run).unwrap_or_default()
-                >= Duration::from_secs(PAUSE_DURATION_SECS)
-        {
-            if float_sensor.is_low()
-                || now.checked_duration_since(last_filter_run).unwrap_or_default()
-                    >= Duration::from_secs(MAX_FILTER_INTERVAL_SECS)
-            {
-                filter_controller.start_filter_process().await;
-                last_filter_run = Instant::now();
+        if !filter_controller.is_running() {
+            if elapsed >= PAUSE_DURATION && (float_low || elapsed >= MAX_FILTER_INTERVAL) {
+                filter_controller.start_filter_process();
+                last_filter_run = now;
+
+            } 
+        }
+        else {
+            if elapsed >= RUN_DURATION {
+                filter_controller.stop_filter_process();
+                last_filter_run = now;
             }
         }
-
-        // check if it is time to stop filter
-        if filter_controller.is_running()
-            && now.checked_duration_since(last_filter_run).unwrap_or_default()
-                >= Duration::from_secs(RUN_DURATION_SECS)
-        {
-            filter_controller.stop_filter_process().await;
-            last_filter_run = Instant::now();
-        }
+            
+        Timer::after(TICK_INTERVAL).await;
     }
 }
